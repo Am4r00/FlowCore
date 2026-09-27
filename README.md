@@ -4,7 +4,7 @@ Aplicação em desenvolvimento para solicitações de reembolso de despesas.
 
 ## Estado atual
 
-O projeto contém uma tela de apresentação em Angular e um Workflow Service em Spring Boot, executável de forma independente, com health check. Ainda não há formulário de reembolso, autenticação, persistência, regras de negócio ou integração externa. A interface ainda não se comunica com o backend.
+O projeto contém uma tela de apresentação em Angular e duas aplicações Spring Boot: Workflow Service e Integration Service, com builds próprios e health checks. Ainda não há formulário de reembolso, autenticação, persistência, regras de negócio ou integração externa. A interface ainda não se comunica com o backend, e os serviços ainda não trocam mensagens.
 
 ## Executar localmente
 
@@ -64,6 +64,41 @@ java -jar target\workflow-service-0.0.1-SNAPSHOT.jar
 
 Consulte novamente o health check. Em Linux/macOS, use `./mvnw` no lugar de `.\mvnw.cmd` e `/` nos caminhos. O serviço não depende de o frontend estar em execução.
 
+## Integration Service
+
+Utiliza Spring Boot 4.1.1 e Java-alvo 21, com os mesmos requisitos de JDK e `JAVA_HOME` descritos para o Workflow. Possui seu próprio Maven Wrapper e utiliza a porta 8081.
+
+No PowerShell, a partir da raiz do repositório:
+
+```powershell
+cd integration-service
+.\mvnw.cmd spring-boot:run
+```
+
+Consulte http://localhost:8081/actuator/health. O resultado esperado contém `"status":"UP"`.
+
+Para testar e empacotar, na pasta `integration-service`:
+
+```powershell
+.\mvnw.cmd verify
+```
+
+Encerre a execução anterior com `Ctrl+C` para liberar a porta 8081 e execute:
+
+```powershell
+java -jar target\integration-service-0.0.1-SNAPSHOT.jar
+```
+
+O teste automatizado atual verifica o carregamento do contexto Spring. Foram verificados manualmente o health check, a execução simultânea dos dois serviços e a resposta do Integration executado pelo JAR mesmo após encerrar o Workflow. Isso demonstra independência de execução nesta etapa; não comprova integração entre serviços ou com ERP, ainda não implementada.
+
+## Endereços locais
+
+| Aplicação | Endereço |
+| --- | --- |
+| Frontend | http://localhost:4200 |
+| Workflow health check | http://localhost:8080/actuator/health |
+| Integration health check | http://localhost:8081/actuator/health |
+
 ## Estrutura
 
 - `web/`: aplicação Angular.
@@ -71,5 +106,6 @@ Consulte novamente o health check. Em Linux/macOS, use `./mvnw` no lugar de `.\m
 - `web/package-lock.json`: versões resolvidas das dependências, utilizadas pelo `npm ci`.
 - `workflow-service/`: backend Spring Boot, configuração e Maven Wrapper.
 - `workflow-service/src/test/`: teste de inicialização do contexto Spring.
+- `integration-service/`: segunda aplicação Spring Boot, com configuração, testes e Maven Wrapper próprios.
 
 Dependências, cache e build são gerados localmente e não fazem parte do versionamento.
