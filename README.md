@@ -8,6 +8,8 @@ O projeto contém uma tela de apresentação em Angular e duas aplicações Spri
 
 ## Executar localmente
 
+Há também uma instância PostgreSQL local via Docker Compose, com bancos e usuários separados para cada serviço. Consulte [Preparação do PostgreSQL](infra/postgres/README.md). Os serviços Java ainda não estão conectados a esses bancos; as migrações e a persistência da aplicação ainda não foram implementadas.
+
 Ambiente utilizado nesta etapa: Node.js 24.21.0, npm 11.19.0 e Angular 22.2.0. O Angular CLI é uma dependência local; não é necessário instalá-lo globalmente.
 
 A partir da raiz do repositório:

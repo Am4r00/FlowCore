@@ -1,3 +1,6 @@
 # Configurações locais do IntelliJ IDEA
 .idea/
 *.iml
+
+# Credenciais locais
+.env
