@@ -4,7 +4,7 @@
 
 Uma instância PostgreSQL 17.11 em Docker, com dois bancos lógicos: `workflow`, pertencente a `workflow_app`, e `integration`, pertencente a `integration_app`. Os usuários não são superusuários e não podem criar outros bancos ou usuários. A permissão padrão de conexão de `PUBLIC` é removida de ambos os bancos.
 
-O script prepara bancos e usuários; não contém tabelas de negócio nem substitui as migrações de cada serviço. Os serviços Java ainda não estão conectados ao PostgreSQL.
+O script prepara bancos e usuários; não contém tabelas de negócio nem substitui as migrações de cada serviço. O Workflow já possui configuração de conexão ao seu banco, descrita no [README principal](../../README.md). O Integration ainda não está conectado.
 
 ## Iniciar a instância
 

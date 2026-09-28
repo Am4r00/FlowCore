@@ -8,7 +8,7 @@ O projeto contém uma tela de apresentação em Angular e duas aplicações Spri
 
 ## Executar localmente
 
-Há também uma instância PostgreSQL local via Docker Compose, com bancos e usuários separados para cada serviço. Consulte [Preparação do PostgreSQL](infra/postgres/README.md). Os serviços Java ainda não estão conectados a esses bancos; as migrações e a persistência da aplicação ainda não foram implementadas.
+Há também uma instância PostgreSQL local via Docker Compose, com bancos e usuários separados para cada serviço. Consulte [Preparação do PostgreSQL](infra/postgres/README.md). O Workflow conecta ao banco `workflow` usando `workflow_app`. O Integration ainda não está conectado ao banco; as migrações e a persistência de dados de negócio ainda não foram implementadas.
 
 Ambiente utilizado nesta etapa: Node.js 24.21.0, npm 11.19.0 e Angular 22.2.0. O Angular CLI é uma dependência local; não é necessário instalá-lo globalmente.
 
@@ -41,30 +41,51 @@ Para conferir a apresentação manualmente, abra a página e verifique título, 
 
 Spring Boot 4.1.1, com Java-alvo 21. Ambiente utilizado: JDK 24.0.2. Configure `JAVA_HOME` para a pasta do JDK. O Maven Wrapper está incluído; não é necessário instalar Maven globalmente. A primeira execução precisa de acesso à internet para baixar Maven e dependências.
 
-No PowerShell, a partir da raiz do repositório:
+Para executar o Workflow, prepare os bancos conforme o guia do PostgreSQL e mantenha o container saudável. No PowerShell, a partir da raiz do repositório, forneça a senha de `workflow_app` sem colocá-la no arquivo de configuração:
 
 ```powershell
 cd workflow-service
+$workflowSecret = Read-Host 'Senha do usuario workflow_app' -AsSecureString
+$env:WORKFLOW_DB_PASSWORD = [System.Net.NetworkCredential]::new('', $workflowSecret).Password
 .\mvnw.cmd spring-boot:run
 ```
 
-Consulte http://localhost:8080/actuator/health. O resultado esperado contém `"status":"UP"`. Esse resultado representa os indicadores atuais do serviço, não a validação de um processo de reembolso ou de um banco de dados.
+A variável existe nesta sessão e é herdada pelos processos iniciados nela. Não imprima seu conteúdo. O `.env` da raiz é utilizado pelo Compose; o Spring Boot não o carrega automaticamente. Para executar pela IDE, configure `WORKFLOW_DB_PASSWORD` na configuração local de execução, sem versionar a senha.
 
-Para testar e empacotar, na pasta `workflow-service`:
+Consulte http://localhost:8080/actuator/health. O resultado esperado contém `"status":"UP"`. O health check agora inclui a conectividade do DataSource com o PostgreSQL, mas não comprova regras de reembolso ou gravação de dados de negócio.
+
+Para testar e empacotar, na pasta `workflow-service`, use o mesmo terminal com a variável definida e mantenha o banco disponível:
 
 ```powershell
 .\mvnw.cmd verify
 ```
 
-O teste atual verifica o carregamento do contexto Spring. A resposta HTTP do health check e a execução pelo JAR foram verificadas manualmente; ainda não há teste automatizado desse endpoint.
+O teste atual verifica o carregamento do contexto Spring; não substitui uma verificação de conexão ou de recuperação do banco. Ainda não há teste automatizado do endpoint de saúde. A execução pelo JAR foi verificada na etapa anterior, antes de acrescentar o DataSource.
 
-Encerre a execução anterior com `Ctrl+C` antes de executar o JAR, para liberar a porta 8080:
+Encerre a execução anterior com `Ctrl+C` antes de executar o JAR, para liberar a porta 8080. O JAR também exige a variável de ambiente definida no terminal:
 
 ```powershell
 java -jar target\workflow-service-0.0.1-SNAPSHOT.jar
 ```
 
 Consulte novamente o health check. Em Linux/macOS, use `./mvnw` no lugar de `.\mvnw.cmd` e `/` nos caminhos. O serviço não depende de o frontend estar em execução.
+
+### Verificação manual da indisponibilidade do banco
+
+Com o Workflow em execução, consulte o health check e confirme `UP`. Em outro terminal, na raiz do repositório:
+
+```powershell
+docker compose stop postgres
+```
+
+Consulte novamente o health check. A resposta pode aguardar o tempo limite de conexão; o estado esperado é `DOWN`. Isso não implica que o processo Java tenha encerrado. Restaure o banco:
+
+```powershell
+docker compose start postgres
+docker compose ps
+```
+
+Quando o container estiver saudável, consulte novamente o endpoint. Foi verificada manualmente a sequência `UP → DOWN → UP`, sem reiniciar o Workflow. Essa interrupção afeta os dois bancos hospedados na instância e preserva o volume.
 
 ## Integration Service
 
