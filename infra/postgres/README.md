@@ -4,7 +4,9 @@
 
 Uma instância PostgreSQL 17.11 em Docker, com dois bancos lógicos: `workflow`, pertencente a `workflow_app`, e `integration`, pertencente a `integration_app`. Os usuários não são superusuários e não podem criar outros bancos ou usuários. A permissão padrão de conexão de `PUBLIC` é removida de ambos os bancos.
 
-O script prepara bancos e usuários; não contém tabelas de negócio nem substitui as migrações de cada serviço. O Workflow já possui configuração de conexão ao seu banco, descrita no [README principal](../../README.md). O Integration ainda não está conectado.
+O script prepara bancos e usuários; não contém tabelas de negócio nem substitui as migrações de cada serviço. Workflow e Integration já conectam aos respectivos bancos e inicializam o Flyway, conforme o [README principal](../../README.md). Cada banco possui seu próprio histórico `public.flyway_schema_history`, ainda vazio. Não há arquivos de migração ou tabelas de negócio nesta etapa.
+
+As aplicações recebem suas senhas por `WORKFLOW_DB_PASSWORD` e `INTEGRATION_DB_PASSWORD`, respectivamente. Essas variáveis não são a senha administrativa `POSTGRES_ADMIN_PASSWORD` usada pelo Compose. Consulte o README principal para defini-las no terminal antes de iniciar ou testar os serviços.
 
 ## Iniciar a instância
 

@@ -4,11 +4,11 @@ Aplicação em desenvolvimento para solicitações de reembolso de despesas.
 
 ## Estado atual
 
-O projeto contém uma tela de apresentação em Angular e duas aplicações Spring Boot: Workflow Service e Integration Service, com builds próprios e health checks. Ainda não há formulário de reembolso, autenticação, persistência, regras de negócio ou integração externa. A interface ainda não se comunica com o backend, e os serviços ainda não trocam mensagens.
+O projeto contém uma tela de apresentação em Angular e duas aplicações Spring Boot: Workflow Service e Integration Service, com builds próprios, conexão ao PostgreSQL, Flyway e health checks. Ainda não há formulário de reembolso, autenticação, persistência de dados de negócio, regras de negócio ou integração externa. A interface ainda não se comunica com o backend, e os serviços ainda não trocam mensagens.
 
 ## Executar localmente
 
-Há também uma instância PostgreSQL local via Docker Compose, com bancos e usuários separados para cada serviço. Consulte [Preparação do PostgreSQL](infra/postgres/README.md). O Workflow conecta ao banco `workflow` usando `workflow_app`. O Integration ainda não está conectado ao banco; as migrações e a persistência de dados de negócio ainda não foram implementadas.
+Há também uma instância PostgreSQL local via Docker Compose, com bancos e usuários separados para cada serviço. Consulte [Preparação do PostgreSQL](infra/postgres/README.md). O Workflow conecta ao banco `workflow` usando `workflow_app`; o Integration conecta ao banco `integration` usando `integration_app`. Cada serviço inicializa o Flyway no próprio banco. Ainda não existem arquivos de migração ou tabelas de negócio.
 
 Ambiente utilizado nesta etapa: Node.js 24.21.0, npm 11.19.0 e Angular 22.2.0. O Angular CLI é uma dependência local; não é necessário instalá-lo globalmente.
 
@@ -60,7 +60,7 @@ Para testar e empacotar, na pasta `workflow-service`, use o mesmo terminal com a
 .\mvnw.cmd verify
 ```
 
-O teste atual verifica o carregamento do contexto Spring; não substitui uma verificação de conexão ou de recuperação do banco. Ainda não há teste automatizado do endpoint de saúde. A execução pelo JAR foi verificada na etapa anterior, antes de acrescentar o DataSource.
+O teste atual verifica o carregamento do contexto Spring, incluindo a inicialização do Flyway com acesso ao banco. Não verifica gravação de dados de negócio nem recuperação após indisponibilidade. Ainda não há teste automatizado do endpoint de saúde. A execução pelo JAR foi verificada na etapa anterior, antes de acrescentar o DataSource e o Flyway.
 
 Encerre a execução anterior com `Ctrl+C` antes de executar o JAR, para liberar a porta 8080. O JAR também exige a variável de ambiente definida no terminal:
 
@@ -91,28 +91,49 @@ Quando o container estiver saudável, consulte novamente o endpoint. Foi verific
 
 Utiliza Spring Boot 4.1.1 e Java-alvo 21, com os mesmos requisitos de JDK e `JAVA_HOME` descritos para o Workflow. Possui seu próprio Maven Wrapper e utiliza a porta 8081.
 
-No PowerShell, a partir da raiz do repositório:
+Prepare os bancos e mantenha o PostgreSQL disponível. No PowerShell, a partir da raiz do repositório, informe a senha de `integration_app`:
 
 ```powershell
 cd integration-service
+$integrationSecret = Read-Host 'Senha do usuario integration_app' -AsSecureString
+$env:INTEGRATION_DB_PASSWORD = [System.Net.NetworkCredential]::new('', $integrationSecret).Password
 .\mvnw.cmd spring-boot:run
 ```
 
-Consulte http://localhost:8081/actuator/health. O resultado esperado contém `"status":"UP"`.
+Consulte http://localhost:8081/actuator/health. O resultado esperado contém `"status":"UP"` e inclui a conectividade com o banco. A variável vale para esta sessão do terminal; ao abrir outra, defina-a novamente. Para executar pela IDE, configure `INTEGRATION_DB_PASSWORD` localmente, sem versionar a senha. O Spring Boot não carrega automaticamente o `.env` do Compose.
 
-Para testar e empacotar, na pasta `integration-service`:
+Para testar e empacotar, na pasta `integration-service`, com a variável definida e o banco disponível:
 
 ```powershell
 .\mvnw.cmd verify
 ```
 
-Encerre a execução anterior com `Ctrl+C` para liberar a porta 8081 e execute:
+Encerre a execução anterior com `Ctrl+C` para liberar a porta 8081 e execute no terminal com a variável de senha definida:
 
 ```powershell
 java -jar target\integration-service-0.0.1-SNAPSHOT.jar
 ```
 
-O teste automatizado atual verifica o carregamento do contexto Spring. Foram verificados manualmente o health check, a execução simultânea dos dois serviços e a resposta do Integration executado pelo JAR mesmo após encerrar o Workflow. Isso demonstra independência de execução nesta etapa; não comprova integração entre serviços ou com ERP, ainda não implementada.
+O teste automatizado atual verifica o carregamento do contexto Spring, incluindo a inicialização do Flyway com acesso ao banco. O teste passou e o comando `verify` concluiu com sucesso após a configuração. Não há teste automatizado de gravação de dados de negócio ou do endpoint de saúde.
+
+Foi verificada manualmente a sequência `UP → DOWN → UP` ao parar e iniciar o PostgreSQL, sem reiniciar o Integration. Para reproduzir, siga a verificação de indisponibilidade descrita acima e consulte a porta 8081. A instância PostgreSQL é compartilhada: pará-la afeta os bancos dos dois serviços.
+
+A execução simultânea dos serviços e a resposta do Integration pelo JAR após encerrar o Workflow foram verificadas antes de adicionar o DataSource e o Flyway. A execução pelo JAR ainda não foi repetida com a configuração atual. Os serviços ainda não se comunicam entre si nem com ERP.
+
+## Flyway nos dois serviços
+
+Cada aplicação usa sua conexão existente para inicializar o Flyway e manter a tabela `public.flyway_schema_history` em seu próprio banco. Os históricos são separados, apesar de as tabelas terem o mesmo nome.
+
+Ainda não há arquivos SQL de migração. Nesta etapa, o aviso `No migrations found` é esperado; a mensagem de banco atualizado significa apenas que não há migrações encontradas pendentes. Não significa que as tabelas de negócio estejam prontas.
+
+Após iniciar cada serviço pela primeira vez, é possível consultar os históricos no PowerShell, na raiz do repositório:
+
+```powershell
+docker compose exec postgres psql -h 127.0.0.1 -U workflow_app -d workflow -W -c "SELECT installed_rank, version, description, success FROM public.flyway_schema_history;"
+docker compose exec postgres psql -h 127.0.0.1 -U integration_app -d integration -W -c "SELECT installed_rank, version, description, success FROM public.flyway_schema_history;"
+```
+
+Informe a senha do usuário indicado em cada comando. As consultas apenas leem o histórico. Foi confirmado manualmente o resultado `(0 rows)` nos dois bancos. A aplicação de uma migração SQL ainda não foi testada. Os bancos precisam estar disponíveis durante a inicialização e os testes, pois o Flyway os acessa nessa etapa.
 
 ## Endereços locais
 
