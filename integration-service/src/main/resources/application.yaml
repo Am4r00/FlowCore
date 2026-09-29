@@ -2,5 +2,10 @@ spring:
   application:
     name: integration-service
 
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/integration
+    username: integration_app
+    password: ${INTEGRATION_DB_PASSWORD}
+
 server:
   port: 8081
