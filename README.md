@@ -135,6 +135,20 @@ docker compose exec postgres psql -h 127.0.0.1 -U integration_app -d integration
 
 Informe a senha do usuário indicado em cada comando. As consultas apenas leem o histórico. Foi confirmado manualmente o resultado `(0 rows)` nos dois bancos. A aplicação de uma migração SQL ainda não foi testada. Os bancos precisam estar disponíveis durante a inicialização e os testes, pois o Flyway os acessa nessa etapa.
 
+## Integração contínua (CI)
+
+O GitHub Actions executa três workflows em pull requests destinados à `main` e em pushes à `main`. Os resultados e logs ficam na aba [Actions](https://github.com/Am4r00/FlowCore/actions).
+
+| Workflow | Ambiente | Verificações |
+| --- | --- | --- |
+| [Web CI](.github/workflows/web-ci.yml) | Ubuntu e Node.js 24.21.0 | `npm ci`, `npm test -- --watch=false` e `npm run build` na pasta `web`. |
+| [Workflow CI](.github/workflows/workflow-ci.yml) | Ubuntu, Java 21 Temurin e PostgreSQL 17.11 temporário | Preparação dos bancos e `verify` pelo Maven Wrapper na pasta `workflow-service`. |
+| [Integration CI](.github/workflows/integration-ci.yml) | Ubuntu, Java 21 Temurin e PostgreSQL 17.11 temporário | Preparação dos bancos e `verify` pelo Maven Wrapper na pasta `integration-service`. |
+
+Cada job Java possui seu próprio contêiner PostgreSQL e executa `infra/postgres/setup-database.sql`. O script cria os dois bancos, mas cada job testa apenas seu serviço, com o respectivo usuário de aplicação. As senhas fictícias dos workflows são exclusivas do ambiente temporário; os jobs não utilizam o banco nem as credenciais locais. O Flyway é inicializado durante o teste de contexto Spring.
+
+Os três workflows passaram nos respectivos pull requests e na `main` após os merges. Os checks cobrem os testes existentes e a geração dos builds; não comprovam regras de negócio, comunicação entre serviços, aplicação de migrações SQL ou recuperação após falhas. Ainda não foi realizado um exercício de falha intencional para verificar o CI vermelho. Os workflows não fazem deploy.
+
 ## Endereços locais
 
 | Aplicação | Endereço |
