@@ -147,7 +147,9 @@ O GitHub Actions executa três workflows em pull requests destinados à `main` e
 
 Cada job Java possui seu próprio contêiner PostgreSQL e executa `infra/postgres/setup-database.sql`. O script cria os dois bancos, mas cada job testa apenas seu serviço, com o respectivo usuário de aplicação. As senhas fictícias dos workflows são exclusivas do ambiente temporário; os jobs não utilizam o banco nem as credenciais locais. O Flyway é inicializado durante o teste de contexto Spring.
 
-Os três workflows passaram nos respectivos pull requests e na `main` após os merges. Os checks cobrem os testes existentes e a geração dos builds; não comprovam regras de negócio, comunicação entre serviços, aplicação de migrações SQL ou recuperação após falhas. Ainda não foi realizado um exercício de falha intencional para verificar o CI vermelho. Os workflows não fazem deploy.
+Os três workflows passaram nos respectivos pull requests e na `main` após os merges. Os checks cobrem os testes existentes e a geração dos builds; não comprovam regras de negócio, comunicação entre serviços, aplicação de migrações SQL ou recuperação após falhas. Os workflows não fazem deploy.
+
+No [PR #5](https://github.com/Am4r00/FlowCore/pull/5), uma expectativa incorreta no teste do título provocou a mesma falha localmente e no Web CI, enquanto os checks dos serviços Java passaram. Após restaurar a expectativa `FlowCore`, a nova execução passou. O PR foi incorporado à `main` com a correção, preservando no histórico os commits do exercício. Essa verificação demonstra a detecção de falha e a recuperação do CI; não comprova que as configurações do repositório impeçam o merge de um PR com checks falhando.
 
 ## Endereços locais
 
