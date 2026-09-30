@@ -1,0 +1,59 @@
+name: Integration CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+
+jobs:
+  integration:
+    name: Testes e build do Integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17.11
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: ci-admin-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Obter codigo
+        uses: actions/checkout@v7
+
+      - name: Preparar Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: integration-service/pom.xml
+
+      - name: Preparar bancos e usuarios
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          docker exec -i "$POSTGRES_CONTAINER" \
+          psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+          < infra/postgres/setup-database.sql
+          docker exec "$POSTGRES_CONTAINER" \
+          psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+          -c "ALTER ROLE integration_app PASSWORD 'ci-integration-only';"
+
+      - name: Executar testes e gerar build
+        working-directory: integration-service
+        env:
+          INTEGRATION_DB_PASSWORD: ci-integration-only
+        run: bash ./mvnw --batch-mode --no-transfer-progress verify
