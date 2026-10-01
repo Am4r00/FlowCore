@@ -60,7 +60,7 @@ Para testar e empacotar, na pasta `workflow-service`, use o mesmo terminal com a
 .\mvnw.cmd verify
 ```
 
-O teste atual verifica o carregamento do contexto Spring, incluindo a inicialização do Flyway com acesso ao banco. Não verifica gravação de dados de negócio nem recuperação após indisponibilidade. Ainda não há teste automatizado do endpoint de saúde. A execução pelo JAR foi verificada na etapa anterior, antes de acrescentar o DataSource e o Flyway.
+Os três testes do Workflow verificam o carregamento do contexto Spring com Flyway, a inserção de uma conta com valores padrão e a rejeição de e-mail duplicado com diferença de maiúsculas. Os dois testes de banco usam PostgreSQL real, JDBC e transações desfeitas automaticamente ao final de cada teste. Não há teste automatizado de recuperação após indisponibilidade ou do endpoint de saúde. A execução pelo JAR foi verificada na etapa anterior, antes de acrescentar o DataSource e o Flyway.
 
 Encerre a execução anterior com `Ctrl+C` antes de executar o JAR, para liberar a porta 8080. O JAR também exige a variável de ambiente definida no terminal:
 
@@ -137,7 +137,9 @@ docker compose exec postgres psql -h 127.0.0.1 -U integration_app -d integration
 
 Informe a senha do usuário indicado em cada comando. As consultas apenas leem o histórico. No Workflow foi confirmada a versão `1`, descrição `create user account` e `success = true`; no Integration o histórico continua vazio. Os bancos precisam estar disponíveis durante a inicialização e os testes, pois o Flyway os acessa nessa etapa.
 
-Foram verificados manualmente no Workflow: criação da tabela, não reaplicação ao reiniciar, inserção com valores padrão e rejeição de login duplicado, e-mail duplicado com diferença de maiúsculas, e-mail nulo ou vazio e login com maiúsculas. Os registros usados nessas verificações foram removidos ou desfeitos por rollback. O `verify` local passou com a V1 já aplicada. As restrições ainda não possuem testes automatizados específicos, e gravações concorrentes não foram testadas. A primeira execução desta migração no banco temporário do CI ainda está pendente de validação no PR.
+Foram verificados manualmente no Workflow: criação da tabela, não reaplicação ao reiniciar, inserção com valores padrão e rejeição de login duplicado, e-mail duplicado com diferença de maiúsculas, e-mail nulo ou vazio e login com maiúsculas. Os registros usados nessas verificações foram removidos ou desfeitos por rollback. A aplicação da V1 em banco novo foi confirmada no Workflow CI do [PR #7](https://github.com/Am4r00/FlowCore/pull/7).
+
+A inserção válida com valores padrão e a rejeição de e-mail duplicado sem diferenciar maiúsculas também possuem testes automatizados em `UserAccountDatabaseTests`. O `verify` local passou com os três testes do Workflow. As outras restrições permanecem verificadas apenas manualmente, e gravações concorrentes não foram testadas. A execução dos dois novos testes no CI ainda aguarda validação no respectivo PR.
 
 ## Integração contínua (CI)
 
