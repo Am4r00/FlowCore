@@ -8,7 +8,7 @@ O projeto contém uma tela de apresentação em Angular e duas aplicações Spri
 
 ## Executar localmente
 
-Há também uma instância PostgreSQL local via Docker Compose, com bancos e usuários separados para cada serviço. Consulte [Preparação do PostgreSQL](infra/postgres/README.md). O Workflow conecta ao banco `workflow` usando `workflow_app`; o Integration conecta ao banco `integration` usando `integration_app`. Cada serviço inicializa o Flyway no próprio banco. Ainda não existem arquivos de migração ou tabelas de negócio.
+Há também uma instância PostgreSQL local via Docker Compose, com bancos e usuários separados para cada serviço. Consulte [Preparação do PostgreSQL](infra/postgres/README.md). O Workflow conecta ao banco `workflow` usando `workflow_app`; o Integration conecta ao banco `integration` usando `integration_app`. Cada serviço inicializa o Flyway no próprio banco. O Workflow possui a primeira migração, que cria a tabela de contas `user_account`, sem inserir usuários. O Integration ainda não possui arquivos de migração.
 
 Ambiente utilizado nesta etapa: Node.js 24.21.0, npm 11.19.0 e Angular 22.2.0. O Angular CLI é uma dependência local; não é necessário instalá-lo globalmente.
 
@@ -124,7 +124,9 @@ A execução simultânea dos serviços e a resposta do Integration pelo JAR apó
 
 Cada aplicação usa sua conexão existente para inicializar o Flyway e manter a tabela `public.flyway_schema_history` em seu próprio banco. Os históricos são separados, apesar de as tabelas terem o mesmo nome.
 
-Ainda não há arquivos SQL de migração. Nesta etapa, o aviso `No migrations found` é esperado; a mensagem de banco atualizado significa apenas que não há migrações encontradas pendentes. Não significa que as tabelas de negócio estejam prontas.
+O Workflow aplica [V1__create_user_account.sql](workflow-service/src/main/resources/db/migration/V1__create_user_account.sql) ao iniciar ou carregar o contexto nos testes. A migração cria `user_account` com identificador UUID, nome, login, e-mail, campo para hash de senha, situação de acesso e instante de criação. Login e e-mail são obrigatórios e únicos; o login deve ser armazenado em minúsculas, e a unicidade do e-mail ignora diferenças de maiúsculas e minúsculas. A tabela ainda não possui contas de demonstração, e autenticação e geração de hashes não estão implementadas.
+
+Após aplicada, a V1 deve ser preservada; alterações posteriores na estrutura devem entrar em novas migrações. O aviso `No migrations found` continua esperado somente no Integration. No Workflow, espera-se validação da V1 e, após sua primeira aplicação, nenhuma migração pendente.
 
 Após iniciar cada serviço pela primeira vez, é possível consultar os históricos no PowerShell, na raiz do repositório:
 
@@ -133,7 +135,9 @@ docker compose exec postgres psql -h 127.0.0.1 -U workflow_app -d workflow -W -c
 docker compose exec postgres psql -h 127.0.0.1 -U integration_app -d integration -W -c "SELECT installed_rank, version, description, success FROM public.flyway_schema_history;"
 ```
 
-Informe a senha do usuário indicado em cada comando. As consultas apenas leem o histórico. Foi confirmado manualmente o resultado `(0 rows)` nos dois bancos. A aplicação de uma migração SQL ainda não foi testada. Os bancos precisam estar disponíveis durante a inicialização e os testes, pois o Flyway os acessa nessa etapa.
+Informe a senha do usuário indicado em cada comando. As consultas apenas leem o histórico. No Workflow foi confirmada a versão `1`, descrição `create user account` e `success = true`; no Integration o histórico continua vazio. Os bancos precisam estar disponíveis durante a inicialização e os testes, pois o Flyway os acessa nessa etapa.
+
+Foram verificados manualmente no Workflow: criação da tabela, não reaplicação ao reiniciar, inserção com valores padrão e rejeição de login duplicado, e-mail duplicado com diferença de maiúsculas, e-mail nulo ou vazio e login com maiúsculas. Os registros usados nessas verificações foram removidos ou desfeitos por rollback. O `verify` local passou com a V1 já aplicada. As restrições ainda não possuem testes automatizados específicos, e gravações concorrentes não foram testadas. A primeira execução desta migração no banco temporário do CI ainda está pendente de validação no PR.
 
 ## Integração contínua (CI)
 
@@ -147,7 +151,7 @@ O GitHub Actions executa três workflows em pull requests destinados à `main` e
 
 Cada job Java possui seu próprio contêiner PostgreSQL e executa `infra/postgres/setup-database.sql`. O script cria os dois bancos, mas cada job testa apenas seu serviço, com o respectivo usuário de aplicação. As senhas fictícias dos workflows são exclusivas do ambiente temporário; os jobs não utilizam o banco nem as credenciais locais. O Flyway é inicializado durante o teste de contexto Spring.
 
-Os três workflows passaram nos respectivos pull requests e na `main` após os merges. Os checks cobrem os testes existentes e a geração dos builds; não comprovam regras de negócio, comunicação entre serviços, aplicação de migrações SQL ou recuperação após falhas. Os workflows não fazem deploy.
+Os três workflows passaram nos respectivos pull requests e na `main` após os merges de sua configuração inicial. Os checks cobrem os testes existentes e a geração dos builds. O teste de contexto do Workflow passa a executar também as migrações disponíveis em seu banco temporário; isso não substitui testes específicos das restrições. Os checks não comprovam regras de reembolso, comunicação entre serviços ou recuperação após falhas. Os workflows não fazem deploy.
 
 No [PR #5](https://github.com/Am4r00/FlowCore/pull/5), uma expectativa incorreta no teste do título provocou a mesma falha localmente e no Web CI, enquanto os checks dos serviços Java passaram. Após restaurar a expectativa `FlowCore`, a nova execução passou. O PR foi incorporado à `main` com a correção, preservando no histórico os commits do exercício. Essa verificação demonstra a detecção de falha e a recuperação do CI; não comprova que as configurações do repositório impeçam o merge de um PR com checks falhando.
 
