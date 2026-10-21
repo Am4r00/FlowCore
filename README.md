@@ -4,7 +4,7 @@ Aplicação em desenvolvimento para solicitações de reembolso de despesas.
 
 ## Estado atual
 
-O projeto contém uma tela de apresentação em Angular e duas aplicações Spring Boot: Workflow Service e Integration Service, com builds próprios, conexão ao PostgreSQL, Flyway e health checks. Ainda não há formulário de reembolso, autenticação, persistência de dados de negócio, regras de negócio ou integração externa. A interface ainda não se comunica com o backend, e os serviços ainda não trocam mensagens.
+O projeto contém uma tela de apresentação em Angular e duas aplicações Spring Boot: Workflow Service e Integration Service, com builds próprios, conexão ao PostgreSQL, Flyway e health checks. O Workflow possui autenticação por sessão para contas persistidas, login/logout, CSRF e consulta da conta autenticada. Ainda não há formulário ou regras de reembolso nem integração externa. A interface ainda não se comunica com o backend, e os serviços ainda não trocam mensagens.
 
 ## Executar localmente
 
@@ -60,7 +60,9 @@ Para testar e empacotar, na pasta `workflow-service`, use o mesmo terminal com a
 .\mvnw.cmd verify
 ```
 
-Os três testes do Workflow verificam o carregamento do contexto Spring com Flyway, a inserção de uma conta com valores padrão e a rejeição de e-mail duplicado com diferença de maiúsculas. Os dois testes de banco usam PostgreSQL real, JDBC e transações desfeitas automaticamente ao final de cada teste. Não há teste automatizado de recuperação após indisponibilidade ou do endpoint de saúde. A execução pelo JAR foi verificada na etapa anterior, antes de acrescentar o DataSource e o Flyway.
+Os seis testes atuais do Workflow cobrem contexto Spring/Flyway (1), persistência e unicidade de e-mail (2), correspondência de senha/hash (1) e autenticação HTTP com MockMvc (2). Os testes HTTP verificam conta inativa recusada com senha correta e conta ativa autenticada com resumo sem senha/hash. Usam PostgreSQL real; os testes de banco e HTTP são transacionais, com rollback ao final. Os relatórios Surefire de 19/10/2026 registram seis testes sem falhas, erros ou skips; a conclusão de `verify` foi relatada pelo operador. Não há teste automatizado de recuperação após indisponibilidade ou do endpoint de saúde. A execução pelo JAR foi verificada na etapa anterior, antes de acrescentar o DataSource e o Flyway.
+
+Para executar somente os dois testes HTTP, use `.\mvnw.cmd "-Dtest=AuthenticationHttpTests" test`. Os testes criam suas próprias contas; não ative o perfil `dev` para executá-los.
 
 Encerre a execução anterior com `Ctrl+C` antes de executar o JAR, para liberar a porta 8080. O JAR também exige a variável de ambiente definida no terminal:
 
@@ -69,6 +71,31 @@ java -jar target\workflow-service-0.0.1-SNAPSHOT.jar
 ```
 
 Consulte novamente o health check. Em Linux/macOS, use `./mvnw` no lugar de `.\mvnw.cmd` e `/` nos caminhos. O serviço não depende de o frontend estar em execução.
+
+### Conta local de demonstração e contrato de autenticação
+
+Na pasta `workflow-service`, com PostgreSQL disponível e `WORKFLOW_DB_PASSWORD` definida como acima:
+
+```powershell
+$workflowDevSecret = Read-Host 'Senha da conta dev' -AsSecureString
+$env:WORKFLOW_DEV_ACCOUNT_PASSWORD = [System.Net.NetworkCredential]::new('', $workflowDevSecret).Password
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=dev"
+```
+
+O perfil `dev` habilita o initializer da conta `usuario.workflow`, nome `Usuário Workflow` e e-mail fictício `usuario.workflow@example.test`. Se o login não existe, exige senha não vazia, gera o hash e persiste a conta ativa. Se já existe, retorna sem alterar dados ou senha. Mudar a variável não redefine a senha existente. Sem o perfil, o initializer não executa. A senha do banco e a senha da conta são credenciais distintas; não imprima nem versione seus valores.
+
+| Requisição | Entrada e resultado |
+| --- | --- |
+| `GET /api/auth/csrf` | Público; retorna token, nome do cabeçalho e do parâmetro CSRF. Preserve os cookies recebidos. |
+| `POST /api/auth/login` | Formulário `application/x-www-form-urlencoded` com `username` e `password`, cookies e token CSRF válido. Sucesso: 204; credenciais inválidas ou conta inativa: 401. |
+| `GET /api/auth/me` | Cookies da sessão autenticada; retorna `id`, `displayName` e `login`. Anônimo: 401. Não recebe senha. |
+| `POST /api/auth/logout` | Cookies e CSRF válido; retorna 204 e encerra a sessão. Novo acesso protegido deve receber 401. |
+
+Depois do login, obtenha novo token em `/api/auth/csrf` usando os mesmos cookies antes de outro POST. No PowerShell, `-SessionVariable` cria o objeto de sessão e `-WebSession` o reutiliza; recriar o objeto perde a continuidade do cliente. POST sem token CSRF válido pode ser recusado com 403 antes da avaliação das credenciais. O cliente envia a senha original; apenas o hash é armazenado.
+
+Foram relatados manualmente: criação da conta dev, uma única linha após reinício, login 204 seguido de `/me`, logout 204 seguido de `/me` 401, senha incorreta 401 e POST sem CSRF 403. Os dois testes HTTP automatizados cobrem somente os cenários descritos na seção de testes, não toda essa sequência manual.
+
+Limites: autenticação não implementa papéis, alçadas ou autorização de reembolso. Não há interface de login Angular nem gestão de contas. Conta inativa é recusada no novo login; invalidar sessões já autenticadas ao desativar uma conta não foi implementado. A configuração local não constitui validação de segurança para produção ou isolamento multiempresa. As mudanças de autenticação ainda não têm resultado de CI observado nesta rodada.
 
 ### Verificação manual da indisponibilidade do banco
 
@@ -124,7 +151,7 @@ A execução simultânea dos serviços e a resposta do Integration pelo JAR apó
 
 Cada aplicação usa sua conexão existente para inicializar o Flyway e manter a tabela `public.flyway_schema_history` em seu próprio banco. Os históricos são separados, apesar de as tabelas terem o mesmo nome.
 
-O Workflow aplica [V1__create_user_account.sql](workflow-service/src/main/resources/db/migration/V1__create_user_account.sql) ao iniciar ou carregar o contexto nos testes. A migração cria `user_account` com identificador UUID, nome, login, e-mail, campo para hash de senha, situação de acesso e instante de criação. Login e e-mail são obrigatórios e únicos; o login deve ser armazenado em minúsculas, e a unicidade do e-mail ignora diferenças de maiúsculas e minúsculas. A tabela ainda não possui contas de demonstração, e autenticação e geração de hashes não estão implementadas.
+O Workflow aplica [V1__create_user_account.sql](workflow-service/src/main/resources/db/migration/V1__create_user_account.sql) ao iniciar ou carregar o contexto nos testes. A migração cria `user_account` com identificador UUID, nome, login, e-mail, campo para hash de senha, situação de acesso e instante de criação. Login e e-mail são obrigatórios e únicos; o login deve ser armazenado em minúsculas, e a unicidade do e-mail ignora diferenças de maiúsculas e minúsculas. A migração não insere contas: a conta local de demonstração é criada pelo initializer do perfil `dev`.
 
 Após aplicada, a V1 deve ser preservada; alterações posteriores na estrutura devem entrar em novas migrações. O aviso `No migrations found` continua esperado somente no Integration. No Workflow, espera-se validação da V1 e, após sua primeira aplicação, nenhuma migração pendente.
 
@@ -139,7 +166,7 @@ Informe a senha do usuário indicado em cada comando. As consultas apenas leem o
 
 Foram verificados manualmente no Workflow: criação da tabela, não reaplicação ao reiniciar, inserção com valores padrão e rejeição de login duplicado, e-mail duplicado com diferença de maiúsculas, e-mail nulo ou vazio e login com maiúsculas. Os registros usados nessas verificações foram removidos ou desfeitos por rollback. A aplicação da V1 em banco novo foi confirmada no Workflow CI do [PR #7](https://github.com/Am4r00/FlowCore/pull/7).
 
-A inserção válida com valores padrão e a rejeição de e-mail duplicado sem diferenciar maiúsculas também possuem testes automatizados em `UserAccountDatabaseTests`. O `verify` local passou com os três testes do Workflow. As outras restrições permanecem verificadas apenas manualmente, e gravações concorrentes não foram testadas. A execução dos dois novos testes no CI ainda aguarda validação no respectivo PR.
+A inserção válida com valores padrão e a rejeição de e-mail duplicado sem diferenciar maiúsculas possuem testes automatizados em `UserAccountDatabaseTests`, incluídos nos seis testes atuais descritos acima. As outras restrições permanecem verificadas apenas manualmente, e gravações concorrentes não foram testadas.
 
 ## Integração contínua (CI)
 
@@ -171,7 +198,7 @@ No [PR #5](https://github.com/Am4r00/FlowCore/pull/5), uma expectativa incorreta
 - `web/src/app/`: componente principal, HTML, CSS e testes.
 - `web/package-lock.json`: versões resolvidas das dependências, utilizadas pelo `npm ci`.
 - `workflow-service/`: backend Spring Boot, configuração e Maven Wrapper.
-- `workflow-service/src/test/`: teste de inicialização do contexto Spring.
+- `workflow-service/src/test/`: testes de contexto, banco, encoder e autenticação HTTP.
 - `integration-service/`: segunda aplicação Spring Boot, com configuração, testes e Maven Wrapper próprios.
 
 Dependências, cache e build são gerados localmente e não fazem parte do versionamento.
