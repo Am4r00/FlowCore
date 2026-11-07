@@ -1,6 +1,35 @@
 <main class="main">
   <div>
     <h1>FlowCore</h1>
+      @switch(session.status){
+        @case ('authenticated'){
+          <p>Nome do usuário: {{session.account.displayName}}</p>
+          <button id="logoutButton" name="logoutButton" type="button" (click)="submitLogout()" [disabled]="pending"> Logout</button>
+        }
+        @case ('loading'){
+          <p>Carregando..</p>
+        }
+        @case ('anonymous'){
+          <form #meuForm="ngForm" (ngSubmit)="submitLogin()">
+
+            <h1> Seja Bem vindo !</h1>
+            <p>Entrou como anonimo</p>
+
+            <label for="usernameLogin">Username: </label>
+            <input name="usernameLogin" id="usernameLogin" [readonly]="pending" [(ngModel)]="username" required>
+
+            <label for="passwordLogin">Password: </label>
+            <input name="passwordLogin" id="passwordLogin" type="password" [readonly]="pending" [(ngModel)]="password" required>
+
+            <button type="submit" [disabled]="meuForm.invalid || pending">Entrar </button>
+
+          </form>
+        }
+        @case ('error'){
+          <p>{{ session.message }}</p>
+        }
+      }
+    <p role="status">{{(pending) ? 'Processando solicitação…' : feedbackMessage }}</p>
     <p>Crie e acompanhe solicitações de reembolso.</p>
   </div>
 </main>
