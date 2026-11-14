@@ -1,9 +1,6 @@
 package com.flowcore.workflow.account.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -34,10 +31,17 @@ public class UserAccount {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @JoinColumn(name = "department_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    private Department department;
+
+    @Column(name = "job_title",length = 100)
+    private String jobTitle;
+
     protected UserAccount() {
     }
 
-    public UserAccount(String displayName, String login, String email, String passwordHash) {
+    public UserAccount(String displayName, String login, String email, String passwordHash, Department department, String jobTitle) {
         this.id = UUID.randomUUID();
         this.displayName = displayName;
         this.login = login;
@@ -45,6 +49,8 @@ public class UserAccount {
         this.passwordHash = passwordHash;
         this.active = true;
         this.createdAt = Instant.now();
+        this.department = department;
+        this.jobTitle = jobTitle;
     }
 
     public UUID getId() {
@@ -73,5 +79,13 @@ public class UserAccount {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Department getDepartment() {
+        return department;
+    }
+
+    public String getJobTitle() {
+        return jobTitle;
     }
 }
